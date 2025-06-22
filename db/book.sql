@@ -201,15 +201,8 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `email`, `password`, `created_at`, `role`) VALUES
-(5, 'userrr', 'user@user.user', '$2y$10$dwtVzwVeJrDGHEi2o7/L9uxfRF0oOsOcTpMJLgJ5BzWI784FwqF6i', '2025-01-26 11:37:40', 'user'),
 (8, 'admin', 'admin@admin', '$2y$10$Imj1NltL9J37kR47DDCoHeq0UdGpJ7aZkJjwZidJI/8ks8bCOSfaa', '2025-01-28 13:50:58', 'admin'),
-(10, 'aminn', 'mohamedamine.louati@iteam-univ.tn', '$2y$10$qvBo22VQzdo3IWMwTnwCuuYA82rLbewyaQ1n0pdeDGI3qe1FU4zDC', '2025-01-31 14:41:12', 'user'),
-(11, 'mohamed', 'mohamed@root.root', '$2y$10$bTQIbMbB/QyvoXhdFILb/OMFl1qKAz1mofKcrlYyQoPA8bnxefWZe', '2025-01-31 23:31:28', 'user'),
-(13, 'ibtisem', 'ibtisem@iteam.com', '$2y$10$6kzqlirY/JHcWqmLsu9DmOQ7d8RxX/ILXMuM1BX0OpKH6Y66KWTZO', '2025-02-01 13:36:47', 'user'),
-(14, 'uuserr', 'user@user', '$2y$10$nY4soQOgN1hfYQjdtOo1hO697AaPag9GfNP9jUfmNzsO3Hi7TAYyS', '2025-02-01 13:50:10', 'user'),
-(15, 'iteammm', 'iteam@iteam.iteam', '$2y$10$FgHHK7paLG093JWkFQwV5e6.6pkbSBDd.HhyiPgs0KJKZBWUTPVA2', '2025-02-01 14:00:53', 'user'),
-(16, 'loueti', 'test@test.com', '$2y$10$lc8/LHPHeROvaBnV6KJ1gebTb60e9evRUDdCLkR09YJcRsdg.N/.2', '2025-06-21 23:25:21', 'user');
-
+  
 --
 -- Index pour les tables déchargées
 --
