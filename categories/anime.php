@@ -11,6 +11,123 @@ $stmt = $pdo->prepare("
 $stmt->execute();
 $manga_books = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Function to get recommendations from Python script
+function getRecommendations($bookTitle) {
+    // Get the absolute path to the Python script
+    $scriptPath = __DIR__ . '/../python_scripts/recommend.py';
+    
+    // Check if Python script exists
+    if (!file_exists($scriptPath)) {
+        return [
+            'error' => 'Python script not found at: ' . $scriptPath,
+            'debug_info' => [
+                'script_path' => $scriptPath,
+                'current_dir' => __DIR__
+            ]
+        ];
+    }
+    
+    // Try different Python commands
+    $pythonCommands = ['python3', 'python', '/usr/bin/python3', '/usr/bin/python'];
+    
+    $lastOutput = '';
+    $lastError = '';
+    
+    foreach ($pythonCommands as $pythonCmd) {
+        // Build command with proper error handling
+        $command = $pythonCmd . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($bookTitle) . " 2>&1";
+        
+        // Execute command and capture output
+        $output = shell_exec($command);
+        $lastOutput = $output;
+        
+        if ($output !== null && !empty(trim($output))) {
+            // Log the raw output for debugging
+            error_log("Python command '$pythonCmd': " . $command);
+            error_log("Python raw output: " . $output);
+            
+            // Clean the output - remove any non-JSON content
+            $lines = explode("\n", trim($output));
+            $jsonLines = [];
+            
+            foreach ($lines as $line) {
+                $trimmed = trim($line);
+                // Look for lines that start with { or are part of JSON
+                if (!empty($trimmed) && (
+                    $trimmed[0] === '{' || 
+                    $trimmed[0] === '}' || 
+                    $trimmed[0] === '"' || 
+                    strpos($trimmed, '":') !== false ||
+                    $trimmed === '[' || 
+                    $trimmed === ']'
+                )) {
+                    $jsonLines[] = $trimmed;
+                }
+            }
+            
+            if (!empty($jsonLines)) {
+                $jsonString = implode('', $jsonLines);
+                $result = json_decode($jsonString, true);
+                
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return $result;
+                }
+            }
+            
+            // Try to decode the full output as JSON
+            $result = json_decode(trim($output), true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return $result;
+            }
+            
+            // If we get here, the output wasn't valid JSON
+            $lastError = "Invalid JSON output from Python script";
+        } else {
+            $lastError = "No output from Python script";
+        }
+    }
+    
+    return [
+        'error' => 'Failed to execute Python script or get valid JSON response',
+        'debug_info' => [
+            'last_output' => $lastOutput,
+            'last_error' => $lastError,
+            'script_path' => $scriptPath,
+            'tried_commands' => $pythonCommands,
+            'json_last_error' => json_last_error_msg()
+        ]
+    ];
+}
+
+// Handle recommendation request via AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['get_recommendations'])) {
+    header('Content-Type: application/json');
+    
+    if (!isset($_POST['book_title']) || empty($_POST['book_title'])) {
+        echo json_encode(['error' => 'Book title is required']);
+        exit();
+    }
+    
+    $bookTitle = trim($_POST['book_title']);
+    
+    // Add some basic validation
+    if (strlen($bookTitle) < 2) {
+        echo json_encode(['error' => 'Book title too short']);
+        exit();
+    }
+    
+    try {
+        $recommendations = getRecommendations($bookTitle);
+        echo json_encode($recommendations, JSON_UNESCAPED_UNICODE);
+    } catch (Exception $e) {
+        echo json_encode([
+            'error' => 'Server error: ' . $e->getMessage(),
+            'debug_info' => ['exception' => $e->getTraceAsString()]
+        ]);
+    }
+    exit();
+}
+
 // Handle "Add to Cart" action
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     if (!isset($_SESSION['user_id'])) {
@@ -66,63 +183,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     exit();
 }
 ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="X-UA-Compatible" content="ie=edge">
-        <title>BookWartz - Manga</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css" />
-  <link rel="stylesheet" href="../assets/style.css">
-    </head>
-    <body>
-    <div class="banner banner-manga">
-        <nav class="navbar navbar-expand-lg";>
-            <div class="container-fluid">
-                <a class="navbar-brand d-flex align-items-center" href="../index.php">
-                    <img src="../images/logo.png" alt="BookWartz Logo" class="logo" style="width: 50px; height: 50px;">
-                    <h2 class="name ms-2">BookWartz</h2>
-                </a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation" style="background-color: #007bff; border: none; border-radius: 5px;">
-                    <span class="navbar-toggler-icon" style="background-color: #fff; width: 30px; height: 30px;"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarContent">
-                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-                        <li class="nav-item">
-                            <a class="nav-link active" href="../index.php" style="color: white; padding: 10px;">Home</a>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="categoriesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: white; padding: 10px;">Categories</a>
-                            <ul class="dropdown-menu" aria-labelledby="categoriesDropdown">
-                                <li><a class="dropdown-item" href="bestsell.php" style="color: #027b9a; padding: 10px;">Bestsellers</a></li>
-                <li><a class="dropdown-item" href="newArrival.php" style="color: #027b9a; padding: 10px;">New Arrivals</a></li>
-                <li><a class="dropdown-item" href="mostpopular.php" style="color: #027b9a; padding: 10px;">Most Popular</a></li>
-                <li><a class="dropdown-item" href="featured.php" style="color: #027b9a; padding: 10px;">Featured</a></li>
-                <li><a class="dropdown-item" href="toprated.php" style="color: #027b9a; padding: 10px;">Top Rated</a></li>
-                <li><a class="dropdown-item" href="fiction.php" style="color: #027b9a; padding: 10px;">Fiction</a></li>
-                <li><a class="dropdown-item" href="nonfiction.php" style="color: #027b9a; padding: 10px;">Non-Fiction</a></li>
-                <li><a class="dropdown-item" href="children.php" style="color: #027b9a; padding: 10px;">Children</a></li>
-                <li><a class="dropdown-item" href="science.php" style="color: #027b9a; padding: 10px;">Science</a></li>
-                <li><a class="dropdown-item" href="history.php" style="color: #027b9a; padding: 10px;">History</a></li>
-                <li><a class="dropdown-item" href="anime.php" style="color: #027b9a; padding: 10px;">Manga</a></li>
-              </ul>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="../controllers/cart.php" style="color: white; padding: 10px;">Cart</a>
-                        </li>
-                        <li class="nav-item">
-                            <form class="d-flex align-items-center">
-                                <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">
-                                <button class="btn btn-outline-primary" type="submit">Search</button>
-                            </form>
-                        </li>
-                    </ul>
-                </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>BookWartz - Manga</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css" />
+    <link rel="stylesheet" href="../assets/style.css">
+    <style>
+        .recommendation-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 30px;
+            border-radius: 15px;
+            margin-top: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .recommendation-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .recommendation-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+        .loading-spinner {
+            display: none;
+        }
+        .debug-info {
+            background-color: #f1f1f1;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .method-badge {
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+        .similarity-score {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        .recommendation-source {
+            font-size: 0.75em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+<div class="banner banner-manga">
+    <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="../index.php">
+                <img src="../images/logo.png" alt="BookWartz Logo" class="logo" style="width: 50px; height: 50px;">
+                <h2 class="name ms-2">BookWartz</h2>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation" style="background-color: #007bff; border: none; border-radius: 5px;">
+                <span class="navbar-toggler-icon" style="background-color: #fff; width: 30px; height: 30px;"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="../index.php" style="color: white; padding: 10px;">Home</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="categoriesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: white; padding: 10px;">Categories</a>
+                        <ul class="dropdown-menu" aria-labelledby="categoriesDropdown">
+                            <li><a class="dropdown-item" href="bestsell.php" style="color: #027b9a; padding: 10px;">Bestsellers</a></li>
+                            <li><a class="dropdown-item" href="newArrival.php" style="color: #027b9a; padding: 10px;">New Arrivals</a></li>
+                            <li><a class="dropdown-item" href="mostpopular.php" style="color: #027b9a; padding: 10px;">Most Popular</a></li>
+                            <li><a class="dropdown-item" href="featured.php" style="color: #027b9a; padding: 10px;">Featured</a></li>
+                            <li><a class="dropdown-item" href="toprated.php" style="color: #027b9a; padding: 10px;">Top Rated</a></li>
+                            <li><a class="dropdown-item" href="fiction.php" style="color: #027b9a; padding: 10px;">Fiction</a></li>
+                            <li><a class="dropdown-item" href="nonfiction.php" style="color: #027b9a; padding: 10px;">Non-Fiction</a></li>
+                            <li><a class="dropdown-item" href="children.php" style="color: #027b9a; padding: 10px;">Children</a></li>
+                            <li><a class="dropdown-item" href="science.php" style="color: #027b9a; padding: 10px;">Science</a></li>
+                            <li><a class="dropdown-item" href="history.php" style="color: #027b9a; padding: 10px;">History</a></li>
+                            <li><a class="dropdown-item" href="anime.php" style="color: #027b9a; padding: 10px;">Manga</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../controllers/cart.php" style="color: white; padding: 10px;">Cart</a>
+                    </li>
+                    <li class="nav-item">
+                        <form class="d-flex align-items-center">
+                            <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">
+                            <button class="btn btn-outline-primary" type="submit">Search</button>
+                        </form>
+                    </li>
+                </ul>
             </div>
-        </nav>
-        <div class="hero-section text-center bg-light py-5">
+        </div>
+    </nav>
+    <div class="hero-section text-center bg-light py-5">
         <h1>Manga Books</h1>
         <p>Immerse yourself in the world of anime and manga with these books.</p>
     </div>
@@ -139,16 +301,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                             <p class="card-text"><?= htmlspecialchars($book['author']) ?></p>
                             <p class="card-text"><strong>Price:</strong> <?= number_format($book['price'], 2) ?> DT</p>
                             <p class="card-text"><strong>Rating:</strong> ⭐⭐⭐⭐⭐</p>
-                            <div class="d-flex">
+                            <div class="d-flex flex-wrap gap-2">
                                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#infoModal<?= $index ?>">More Info</button>
-                                <form action="anime.php" method="POST">
+                                <button class="btn btn-info btn-sm" onclick="getRecommendations('<?= htmlspecialchars($book['title'], ENT_QUOTES) ?>')">Get Recommendations</button>
+                                <form action="anime.php" method="POST" class="d-inline">
                                     <input type="hidden" name="book_id" value="<?php echo $book['id']; ?>">
-                                    <button type="submit" name="add_to_cart" class="btn btn-danger ms-2">Add to Cart</button>
-                                  </form>               
-                                </div>
+                                    <button type="submit" name="add_to_cart" class="btn btn-danger">Add to Cart</button>
+                                </form>               
+                            </div>
                         </div>
                     </div>
                 </div>
+                
+                <!-- Book Info Modal -->
                 <div class="modal fade" id="infoModal<?= $index ?>" tabindex="-1" aria-labelledby="infoModal<?= $index ?>Label" aria-hidden="true">
                     <div class="modal-dialog">
                         <div class="modal-content">
@@ -174,6 +339,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         </div>
     </div>
 
+    <!-- Recommendations Section -->
+    <div class="container my-5">
+        <div id="recommendationsSection" class="recommendation-section" style="display: none;">
+            <h3 class="text-center mb-4">📚 Recommended Books</h3>
+            <div class="text-center loading-spinner" id="loadingSpinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Getting personalized recommendations...</p>
+            </div>
+            <div id="recommendationsContent" class="row g-3"></div>
+            <div id="recommendationsError" class="alert alert-warning" style="display: none;"></div>
+            <div id="debugInfo" class="debug-info" style="display: none;"></div>
+            <div class="text-center mt-3">
+                <button class="btn btn-outline-secondary btn-sm" onclick="toggleDebugInfo()">
+                    <span id="debugToggleText">Show Debug Info</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
     <div class="modal fade" id="addtocart" tabindex="-1" aria-labelledby="addtocartLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -191,15 +378,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     <div class="d-flex justify-content-center my-4">
         <button class="btn btn-outline-primary">Load More</button>
     </div>
+
     <footer class="text-white pt-4" style="background-color: #004658;">
         <div class="container">
             <div class="row">
                 <div class="col-md-4 pt-3">
                     <a class="navbar-brand d-flex align-items-center" href="../index.php">
-          <img src="../images/logo.png" alt="BookWartz Logo" class="logo col-md-2" style="max-width: 50px; max-height: 50px;">
+                        <img src="../images/logo.png" alt="BookWartz Logo" class="logo col-md-2" style="max-width: 50px; max-height: 50px;">
                         <h2 class="name">BookWartz</h2>
                     </a>
-                <p>BookWartz is your go-to online bookstore, offering a wide selection of books for all genres. Discover, read, and enjoy from the comfort of your home.</p>
+                    <p>BookWartz is your go-to online bookstore, offering a wide selection of books for all genres. Discover, read, and enjoy from the comfort of your home.</p>
                 </div>
                 <div class="col-md-4 pt-3 text-center">
                     <h5>Useful Links</h5>
@@ -227,7 +415,147 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             </div>
         </div>
     </footer>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    </body>
-    </html>
-    
+    <script>
+        function getRecommendations(bookTitle) {
+            const recommendationsSection = document.getElementById('recommendationsSection');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const recommendationsContent = document.getElementById('recommendationsContent');
+            const recommendationsError = document.getElementById('recommendationsError');
+            const debugInfo = document.getElementById('debugInfo');
+            
+            // Show the recommendations section and loading spinner
+            recommendationsSection.style.display = 'block';
+            loadingSpinner.style.display = 'block';
+            recommendationsContent.innerHTML = '';
+            recommendationsError.style.display = 'none';
+            debugInfo.style.display = 'none';
+            
+            // Scroll to recommendations section
+            recommendationsSection.scrollIntoView({ behavior: 'smooth' });
+            
+            // Make AJAX request with better error handling
+            fetch('anime.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'get_recommendations=1&book_title=' + encodeURIComponent(bookTitle)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Get the response text first to check if it's valid JSON
+                return response.text();
+            })
+            .then(text => {
+                loadingSpinner.style.display = 'none';
+                
+                // Try to parse as JSON
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response: ${text.substring(0, 200)}...`);
+                }
+                
+                // Show debug information
+                if (data.debug_info) {
+                    debugInfo.innerHTML = '<strong>Debug Info:</strong><br><pre>' + JSON.stringify(data.debug_info, null, 2) + '</pre>';
+                }
+                
+                if (data.error) {
+                    let errorMessage = data.error;
+                    if (data.debug_info) {
+                        errorMessage += '<br><br><strong>Debug Info:</strong><br><pre>' + JSON.stringify(data.debug_info, null, 2) + '</pre>';
+                    }
+                    recommendationsError.innerHTML = errorMessage;
+                    recommendationsError.style.display = 'block';
+                } else if (data.recommendations && data.recommendations.length > 0) {
+                    displayRecommendations(data.recommendations, data.original_input || bookTitle, data.method_used);
+                } else {
+                    recommendationsError.innerHTML = 'No recommendations found for this book. The recommendation system may need more data or the book title might not be recognized.';
+                    recommendationsError.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                loadingSpinner.style.display = 'none';
+                recommendationsError.innerHTML = `
+                    <strong>Error fetching recommendations:</strong><br>
+                    ${error.message}<br><br>
+                    <small>This could be due to:</small>
+                    <ul>
+                        <li>Python script not found or not executable</li>
+                        <li>Missing Python dependencies (pandas, sklearn, numpy, etc.)</li>
+                        <li>Database connection issues</li>
+                        <li>Server configuration problems</li>
+                    </ul>
+                `;
+                recommendationsError.style.display = 'block';
+                console.error('Error:', error);
+            });
+        }
+        
+        function displayRecommendations(recommendations, originalBook, methods) {
+            const recommendationsContent = document.getElementById('recommendationsContent');
+            
+            let methodBadges = '';
+            if (methods && methods.length > 0) {
+                methodBadges = methods.map(method => 
+                    `<span class="badge bg-info method-badge">${method.replace('_', ' ')}</span>`
+                ).join(' ');
+            }
+            
+            let html = `<div class="col-12 mb-3">
+                <h5 class="text-center">Because you're interested in "${originalBook}", you might also like:</h5>
+                ${methodBadges ? `<div class="text-center mt-2">${methodBadges}</div>` : ''}
+            </div>`;
+            
+            recommendations.forEach(rec => {
+                const title = rec.title || rec;
+                const author = rec.author || '';
+                const score = rec.similarity_score || 0;
+                const source = rec.source || '';
+                
+                html += `
+                    <div class="col-md-2 col-sm-4 col-6">
+                        <div class="card recommendation-card h-100">
+                            <div class="card-body text-center p-2">
+                                <h6 class="card-title small">${title}</h6>
+                                ${author ? `<p class="card-text small text-muted">${author}</p>` : ''}
+                                ${score > 0 ? `<small class="similarity-score">Score: ${(score * 100).toFixed(1)}%</small><br>` : ''}
+                                ${source ? `<small class="recommendation-source">${source}</small><br>` : ''}
+                                <button class="btn btn-outline-primary btn-sm mt-1" onclick="searchForBook('${title}')">
+                                    Find Book
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            recommendationsContent.innerHTML = html;
+        }
+        
+        function searchForBook(bookTitle) {
+            alert('Searching for: ' + bookTitle + '\n\nThis would typically redirect to a search page or filter the current results.');
+        }
+        
+        function toggleDebugInfo() {
+            const debugInfo = document.getElementById('debugInfo');
+            const toggleText = document.getElementById('debugToggleText');
+            
+            if (debugInfo.style.display === 'none' || debugInfo.style.display === '') {
+                debugInfo.style.display = 'block';
+                toggleText.textContent = 'Hide Debug Info';
+            } else {
+                debugInfo.style.display = 'none';
+                toggleText.textContent = 'Show Debug Info';
+            }
+        }
+    </script>
+</body>
+</html>
