@@ -8,6 +8,8 @@ import mysql.connector
 from mysql.connector import Error
 import logging
 from difflib import SequenceMatcher
+import unicodedata
+import re
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,7 +21,10 @@ DB_CONFIG = {
     'host': 'localhost',
     'database': 'book',
     'user': 'root',
-    'password': ''
+    'password': '',
+    'charset': 'utf8mb4',
+    'use_unicode': True,
+    'collation': 'utf8mb4_unicode_ci'
 }
 
 def log_debug(message):
@@ -28,11 +33,37 @@ def log_debug(message):
 def get_db_connection():
     try:
         connection = mysql.connector.connect(**DB_CONFIG)
+        # Set connection encoding
+        connection.set_charset_collation('utf8mb4', 'utf8mb4_unicode_ci')
         log_debug("Database connection successful")
         return connection
     except Error as e:
         log_debug(f"Database connection failed: {str(e)}")
         return None
+
+def normalize_title(title):
+    """Normalize title for better matching"""
+    if not title:
+        return ""
+    
+    # Convert to string if not already
+    title = str(title)
+    
+    # Normalize unicode characters
+    title = unicodedata.normalize('NFKD', title)
+    
+    # Remove or replace problematic characters
+    title = title.replace("'", "'")  # Replace curly apostrophe with straight
+    title = title.replace("'", "'")  # Replace another curly apostrophe
+    title = title.replace(""", '"')  # Replace curly quote
+    title = title.replace(""", '"')  # Replace another curly quote
+    title = title.replace("–", "-")  # Replace en dash
+    title = title.replace("—", "-")  # Replace em dash
+    
+    # Remove extra whitespace
+    title = re.sub(r'\s+', ' ', title).strip()
+    
+    return title
 
 def load_books_from_database():
     try:
@@ -41,6 +72,9 @@ def load_books_from_database():
             return None
         
         cursor = connection.cursor(dictionary=True)
+        cursor.execute("SET NAMES utf8mb4")
+        cursor.execute("SET CHARACTER SET utf8mb4")
+        
         query = """
         SELECT b.id, b.title, b.author, b.description, b.price, b.rating, 
                b.image, c.name as category_name, b.category_id
@@ -53,6 +87,16 @@ def load_books_from_database():
         
         cursor.close()
         connection.close()
+        
+        if books:
+            # Normalize titles when creating DataFrame
+            for book in books:
+                book['title'] = normalize_title(book['title'])
+                book['author'] = normalize_title(book['author'])
+                if book['description']:
+                    book['description'] = normalize_title(book['description'])
+                if book['category_name']:
+                    book['category_name'] = normalize_title(book['category_name'])
         
         log_debug(f"Loaded {len(books)} books from database")
         return pd.DataFrame(books) if books else None
@@ -68,6 +112,8 @@ def load_user_interactions():
             return None
         
         cursor = connection.cursor(dictionary=True)
+        cursor.execute("SET NAMES utf8mb4")
+        cursor.execute("SET CHARACTER SET utf8mb4")
         
         query = """
         SELECT DISTINCT u.id as user_id, b.id as book_id, b.title, 
@@ -93,6 +139,11 @@ def load_user_interactions():
         cursor.close()
         connection.close()
         
+        if interactions:
+            # Normalize titles in interactions
+            for interaction in interactions:
+                interaction['title'] = normalize_title(interaction['title'])
+        
         log_debug(f"Loaded {len(interactions)} user interactions")
         return pd.DataFrame(interactions) if interactions else None
         
@@ -102,45 +153,59 @@ def load_user_interactions():
 
 def create_content_features(books_df):
     books_df['features'] = (
-        books_df['title'].fillna('') + ' ' + 
-        books_df['author'].fillna('') + ' ' + 
-        books_df['description'].fillna('') + ' ' + 
-        books_df['category_name'].fillna('')
+        books_df['title'].fillna('').astype(str) + ' ' + 
+        books_df['author'].fillna('').astype(str) + ' ' + 
+        books_df['description'].fillna('').astype(str) + ' ' + 
+        books_df['category_name'].fillna('').astype(str)
     )
     return books_df
 
 def find_similar_title(input_title, title_list, threshold=0.4):
-    input_title_lower = input_title.lower().strip()
-    log_debug(f"Looking for similar title to: '{input_title}'")
+    """Enhanced title matching with better normalization"""
     
-    for title in title_list:
-        if title.lower().strip() == input_title_lower:
-            log_debug(f"Exact match found: '{title}'")
-            return title
+    # Normalize input title
+    input_title_normalized = normalize_title(input_title).lower()
+    log_debug(f"Looking for similar title to: '{input_title}' -> normalized: '{input_title_normalized}'")
     
-    for title in title_list:
-        if input_title_lower in title.lower():
-            log_debug(f"Partial match found: '{title}'")
-            return title
+    # Create normalized title list
+    normalized_titles = [(normalize_title(title).lower(), title) for title in title_list]
     
-    for title in title_list:
-        if title.lower().strip() in input_title_lower:
-            log_debug(f"Reverse partial match found: '{title}'")
-            return title
+    # 1. Exact match (normalized)
+    for normalized_title, original_title in normalized_titles:
+        if normalized_title == input_title_normalized:
+            log_debug(f"Exact match found: '{original_title}'")
+            return original_title
     
+    # 2. Partial match - input contains title
+    for normalized_title, original_title in normalized_titles:
+        if normalized_title and normalized_title in input_title_normalized:
+            log_debug(f"Partial match found (input contains title): '{original_title}'")
+            return original_title
+    
+    # 3. Partial match - title contains input
+    for normalized_title, original_title in normalized_titles:
+        if input_title_normalized and input_title_normalized in normalized_title:
+            log_debug(f"Partial match found (title contains input): '{original_title}'")
+            return original_title
+    
+    # 4. Fuzzy matching
     best_match = None
     best_ratio = 0
     
-    for title in title_list:
-        ratio = SequenceMatcher(None, input_title_lower, title.lower()).ratio()
-        if ratio > best_ratio and ratio >= threshold:
-            best_ratio = ratio
-            best_match = title
+    for normalized_title, original_title in normalized_titles:
+        if normalized_title:  # Skip empty titles
+            ratio = SequenceMatcher(None, input_title_normalized, normalized_title).ratio()
+            if ratio > best_ratio and ratio >= threshold:
+                best_ratio = ratio
+                best_match = original_title
     
     if best_match:
         log_debug(f"Fuzzy match found: '{best_match}' (ratio: {best_ratio:.2f})")
     else:
         log_debug("No similar title found")
+        log_debug(f"Input: '{input_title_normalized}'")
+        sample_titles = [title for _, title in normalized_titles[:5]]
+        log_debug(f"Sample available titles: {sample_titles}")
     
     return best_match
 
@@ -187,12 +252,12 @@ def get_collaborative_recommendations(book_title, books_df, interactions_df, num
                     book_info = book_info.iloc[0]
                     similar_books.append({
                         'book_id': int(book_id),
-                        'title': book_info['title'],
-                        'author': book_info['author'],
-                        'description': book_info['description'],
+                        'title': str(book_info['title']),
+                        'author': str(book_info['author']),
+                        'description': str(book_info['description']) if book_info['description'] else '',
                         'price': float(book_info['price']) if book_info['price'] else 0,
-                        'image': book_info['image'],
-                        'category_name': book_info['category_name'],
+                        'image': str(book_info['image']) if book_info['image'] else '',
+                        'category_name': str(book_info['category_name']) if book_info['category_name'] else '',
                         'similarity_score': float(similarity_score),
                         'source': 'collaborative'
                     })
@@ -238,12 +303,12 @@ def get_content_recommendations(book_title, books_df, num_recommendations=6):
                 book = books_df.iloc[i]
                 recommendations.append({
                     'book_id': int(book['id']),
-                    'title': book['title'],
-                    'author': book['author'],
-                    'description': book['description'],
+                    'title': str(book['title']),
+                    'author': str(book['author']),
+                    'description': str(book['description']) if book['description'] else '',
                     'price': float(book['price']) if book['price'] else 0,
-                    'image': book['image'],
-                    'category_name': book['category_name'],
+                    'image': str(book['image']) if book['image'] else '',
+                    'category_name': str(book['category_name']) if book['category_name'] else '',
                     'similarity_score': float(score),
                     'source': 'content_based'
                 })
@@ -286,12 +351,12 @@ def get_category_recommendations(book_title, books_df, num_recommendations=3):
         for _, book in same_category_books.head(num_recommendations).iterrows():
             recommendations.append({
                 'book_id': int(book['id']),
-                'title': book['title'],
-                'author': book['author'],
-                'description': book['description'],
+                'title': str(book['title']),
+                'author': str(book['author']),
+                'description': str(book['description']) if book['description'] else '',
                 'price': float(book['price']) if book['price'] else 0,
-                'image': book['image'],
-                'category_name': book['category_name'],
+                'image': str(book['image']) if book['image'] else '',
+                'category_name': str(book['category_name']) if book['category_name'] else '',
                 'similarity_score': 0.8,
                 'source': 'same_category'
             })
@@ -309,6 +374,8 @@ def get_category_recommendations(book_title, books_df, num_recommendations=3):
 
 def recommend_books(book_title):
     try:
+        # Normalize input title
+        book_title = normalize_title(book_title)
         log_debug(f"Starting recommendation for: '{book_title}'")
         
         books_df = load_books_from_database()
@@ -382,6 +449,13 @@ def main():
             book_input = sys.argv[1]
             result = recommend_books(book_input)
         
+        # Force UTF-8 encoding for output
+        import codecs
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        else:
+            sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
+        
         print(json.dumps(result, ensure_ascii=False, indent=None))
         
     except Exception as e:
@@ -389,7 +463,11 @@ def main():
             'error': f"Script execution error: {str(e)}",
             'debug_info': {'exception': str(e)}
         }
-        print(json.dumps(error_result, ensure_ascii=False, indent=None))
+        try:
+            print(json.dumps(error_result, ensure_ascii=False, indent=None))
+        except:
+            # Fallback to ASCII-safe output
+            print(json.dumps(error_result, ensure_ascii=True, indent=None))
 
 if __name__ == "__main__":
     main()
