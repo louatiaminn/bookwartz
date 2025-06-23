@@ -2,7 +2,6 @@
 session_start();
 require '../includes/cnx.php';
 
-// Fetch Manga books
 $stmt = $pdo->prepare("
     SELECT title, author, price, image, description, id 
     FROM books 
@@ -11,12 +10,9 @@ $stmt = $pdo->prepare("
 $stmt->execute();
 $manga_books = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Function to get recommendations from Python script
 function getRecommendations($bookTitle) {
-    // Get the absolute path to the Python script
     $scriptPath = __DIR__ . '/../python_scripts/recommend.py';
     
-    // Check if Python script exists
     if (!file_exists($scriptPath)) {
         return [
             'error' => 'Python script not found at: ' . $scriptPath,
@@ -27,32 +23,26 @@ function getRecommendations($bookTitle) {
         ];
     }
     
-    // Try different Python commands
     $pythonCommands = ['python3', 'python', '/usr/bin/python3', '/usr/bin/python'];
     
     $lastOutput = '';
     $lastError = '';
     
     foreach ($pythonCommands as $pythonCmd) {
-        // Build command with proper error handling
         $command = $pythonCmd . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($bookTitle) . " 2>&1";
         
-        // Execute command and capture output
         $output = shell_exec($command);
         $lastOutput = $output;
         
         if ($output !== null && !empty(trim($output))) {
-            // Log the raw output for debugging
             error_log("Python command '$pythonCmd': " . $command);
             error_log("Python raw output: " . $output);
             
-            // Clean the output - remove any non-JSON content
             $lines = explode("\n", trim($output));
             $jsonLines = [];
             
             foreach ($lines as $line) {
                 $trimmed = trim($line);
-                // Look for lines that start with { or are part of JSON
                 if (!empty($trimmed) && (
                     $trimmed[0] === '{' || 
                     $trimmed[0] === '}' || 
@@ -74,13 +64,11 @@ function getRecommendations($bookTitle) {
                 }
             }
             
-            // Try to decode the full output as JSON
             $result = json_decode(trim($output), true);
             if (json_last_error() === JSON_ERROR_NONE) {
                 return $result;
             }
             
-            // If we get here, the output wasn't valid JSON
             $lastError = "Invalid JSON output from Python script";
         } else {
             $lastError = "No output from Python script";
@@ -99,7 +87,6 @@ function getRecommendations($bookTitle) {
     ];
 }
 
-// Handle recommendation request via AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['get_recommendations'])) {
     header('Content-Type: application/json');
     
@@ -110,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['get_recommendations']
     
     $bookTitle = trim($_POST['book_title']);
     
-    // Add some basic validation
     if (strlen($bookTitle) < 2) {
         echo json_encode(['error' => 'Book title too short']);
         exit();
@@ -128,7 +114,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['get_recommendations']
     exit();
 }
 
-// Handle "Add to Cart" action
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     if (!isset($_SESSION['user_id'])) {
         $_SESSION['error_message'] = "You must be logged in to add items to the cart.";
@@ -139,7 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $book_id = $_POST['book_id'];
     $user_id = $_SESSION['user_id'];
 
-    // Ensure that the book exists in the database
     $stmt = $pdo->prepare("SELECT id FROM books WHERE id = ?");
     $stmt->execute([$book_id]);
     $book = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -150,13 +134,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         exit();
     }
 
-    // Check if user has a cart
     $stmt = $pdo->prepare("SELECT id FROM cart WHERE user_id = ?");
     $stmt->execute([$user_id]);
     $cart = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$cart) {
-        // Create a new cart for the user
         $stmt = $pdo->prepare("INSERT INTO cart (user_id) VALUES (?)");
         $stmt->execute([$user_id]);
         $cart_id = $pdo->lastInsertId();
@@ -164,17 +146,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         $cart_id = $cart['id'];
     }
 
-    // Check if the item is already in the cart
     $stmt = $pdo->prepare("SELECT quantity FROM cart_items WHERE cart_id = ? AND book_id = ?");
     $stmt->execute([$cart_id, $book_id]);
     $existingItem = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($existingItem) {
-        // Update quantity if item already exists
         $stmt = $pdo->prepare("UPDATE cart_items SET quantity = quantity + 1 WHERE cart_id = ? AND book_id = ?");
         $stmt->execute([$cart_id, $book_id]);
     } else {
-        // Add new item to cart
         $stmt = $pdo->prepare("INSERT INTO cart_items (cart_id, book_id, quantity) VALUES (?, ?, 1)");
         $stmt->execute([$cart_id, $book_id]);
     }
@@ -313,7 +292,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                     </div>
                 </div>
                 
-                <!-- Book Info Modal -->
                 <div class="modal fade" id="infoModal<?= $index ?>" tabindex="-1" aria-labelledby="infoModal<?= $index ?>Label" aria-hidden="true">
                     <div class="modal-dialog">
                         <div class="modal-content">
@@ -339,7 +317,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         </div>
     </div>
 
-    <!-- Recommendations Section -->
     <div class="container my-5">
         <div id="recommendationsSection" class="recommendation-section" style="display: none;">
             <h3 class="text-center mb-4">📚 Recommended Books</h3>
@@ -353,14 +330,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             <div id="recommendationsError" class="alert alert-warning" style="display: none;"></div>
             <div id="debugInfo" class="debug-info" style="display: none;"></div>
             <div class="text-center mt-3">
-                <button class="btn btn-outline-secondary btn-sm" onclick="toggleDebugInfo()">
-                    <span id="debugToggleText">Show Debug Info</span>
-                </button>
             </div>
         </div>
     </div>
 
-    <!-- Success Modal -->
     <div class="modal fade" id="addtocart" tabindex="-1" aria-labelledby="addtocartLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -425,17 +398,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             const recommendationsError = document.getElementById('recommendationsError');
             const debugInfo = document.getElementById('debugInfo');
             
-            // Show the recommendations section and loading spinner
             recommendationsSection.style.display = 'block';
             loadingSpinner.style.display = 'block';
             recommendationsContent.innerHTML = '';
             recommendationsError.style.display = 'none';
             debugInfo.style.display = 'none';
             
-            // Scroll to recommendations section
             recommendationsSection.scrollIntoView({ behavior: 'smooth' });
             
-            // Make AJAX request with better error handling
             fetch('anime.php', {
                 method: 'POST',
                 headers: {
@@ -448,13 +418,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                // Get the response text first to check if it's valid JSON
                 return response.text();
             })
             .then(text => {
                 loadingSpinner.style.display = 'none';
                 
-                // Try to parse as JSON
                 let data;
                 try {
                     data = JSON.parse(text);
@@ -462,7 +430,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                     throw new Error(`Invalid JSON response: ${text.substring(0, 200)}...`);
                 }
                 
-                // Show debug information
                 if (data.debug_info) {
                     debugInfo.innerHTML = '<strong>Debug Info:</strong><br><pre>' + JSON.stringify(data.debug_info, null, 2) + '</pre>';
                 }
@@ -511,19 +478,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             
             let html = `<div class="col-12 mb-3">
                 <h5 class="text-center">Because you're interested in "${originalBook}", you might also like:</h5>
-                ${methodBadges ? `<div class="text-center mt-2">${methodBadges}</div>` : ''}
             </div>`;
             
             recommendations.forEach(rec => {
                 const title = rec.title || rec;
                 const author = rec.author || '';
                 const score = rec.similarity_score || 0;
+                const image = rec.image || '';
                 const source = rec.source || '';
-                
+
                 html += `
                     <div class="col-md-2 col-sm-4 col-6">
                         <div class="card recommendation-card h-100">
                             <div class="card-body text-center p-2">
+                                ${image ? `<img src="${image}" class="card-img-top" alt="${title}">` : ''}
                                 <h6 class="card-title small">${title}</h6>
                                 ${author ? `<p class="card-text small text-muted">${author}</p>` : ''}
                                 ${score > 0 ? `<small class="similarity-score">Score: ${(score * 100).toFixed(1)}%</small><br>` : ''}
