@@ -161,6 +161,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     header("Location: ../controllers/cart.php");
     exit();
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['find_book_id'])) {
+    header('Content-Type: application/json');
+    
+    $bookTitle = trim($_POST['book_title']);
+    $bookAuthor = trim($_POST['book_author']);
+    
+    // Try to find the book by title and author
+    $stmt = $pdo->prepare("SELECT id FROM books WHERE title LIKE ? AND author LIKE ?");
+    $stmt->execute(['%' . $bookTitle . '%', '%' . $bookAuthor . '%']);
+    $book = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+    if (!$book) {
+        $stmt = $pdo->prepare("SELECT id FROM books WHERE title LIKE ?");
+        $stmt->execute(['%' . $bookTitle . '%']);
+        $book = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+    
+    if ($book) {
+        echo json_encode(['book_id' => $book['id']]);
+    } else {
+        echo json_encode(['error' => 'Book not found']);
+    }
+    exit();
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -496,8 +521,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                                 ${author ? `<p class="card-text small text-muted">${author}</p>` : ''}
                                 ${score > 0 ? `<small class="similarity-score">Score: ${(score * 100).toFixed(1)}%</small><br>` : ''}
                                 ${source ? `<small class="recommendation-source">${source}</small><br>` : ''}
-                                <button class="btn btn-outline-primary btn-sm mt-1" onclick="searchForBook('${title}')">
-                                    Find Book
+                                <button class="btn btn-danger btn-sm mt-1" onclick="addRecommendedBookToCart('${title}', '${author}')">
+                                 Add to Cart
                                 </button>
                             </div>
                         </div>
@@ -508,10 +533,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             recommendationsContent.innerHTML = html;
         }
         
-        function searchForBook(bookTitle) {
-            alert('Searching for: ' + bookTitle + '\n\nThis would typically redirect to a search page or filter the current results.');
+       function addRecommendedBookToCart(bookTitle, bookAuthor) {
+    // First, we need to find the book ID from our database
+    fetch('anime.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'find_book_id=1&book_title=' + encodeURIComponent(bookTitle) + '&book_author=' + encodeURIComponent(bookAuthor)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.book_id) {
+            // Create a form and submit it
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'anime.php';
+            
+            const bookIdInput = document.createElement('input');
+            bookIdInput.type = 'hidden';
+            bookIdInput.name = 'book_id';
+            bookIdInput.value = data.book_id;
+            
+            const addToCartInput = document.createElement('input');
+            addToCartInput.type = 'hidden';
+            addToCartInput.name = 'add_to_cart';
+            addToCartInput.value = '1';
+            
+            form.appendChild(bookIdInput);
+            form.appendChild(addToCartInput);
+            document.body.appendChild(form);
+            form.submit();
+        } else {
+            alert('Sorry, this book is not available in our store.');
         }
-        
+    })
+    .catch(error => {
+        alert('Error adding book to cart: ' + error.message);
+    });
+}
+
         function toggleDebugInfo() {
             const debugInfo = document.getElementById('debugInfo');
             const toggleText = document.getElementById('debugToggleText');

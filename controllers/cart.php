@@ -3,7 +3,6 @@ session_start();
 require '../includes/cnx.php';
 
 if (!isset($_SESSION['user_id'])) {
-    $_SESSION['error_message'] = "You must be logged in to view your cart.";
     header("Location: login.php");
     exit();
 }
@@ -13,13 +12,11 @@ $user_id = $_SESSION['user_id'];
 $stmt = $pdo->prepare("SELECT id FROM cart WHERE user_id = ?");
 $stmt->execute([$user_id]);
 $cart = $stmt->fetch(PDO::FETCH_ASSOC);
-
 if (!$cart) {
     $cart_id = null;
 } else {
     $cart_id = $cart['id'];
 }
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
     $cart_item_id = $_POST['cart_item_id'];
     $new_quantity = max(1, intval($_POST['quantity']));
@@ -55,37 +52,27 @@ if ($cart_id) {
     ");
     $stmt->execute([$cart_id]);
     $cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
     foreach ($cart_items as $item) {
         $total_price += $item['price'] * $item['quantity'];
     }
 }
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
-    // Retrieve and sanitize form input
     $name            = trim($_POST['name']);
     $card_number     = trim($_POST['card_number']);
     $expiry_date     = trim($_POST['expiry_date']);
     $cvv             = trim($_POST['cvv']);
     $billing_address = trim($_POST['billing_address']);
-
-
     if (empty($name) || empty($card_number) || empty($expiry_date) || empty($cvv) || empty($billing_address)) {
         $_SESSION['error_message'] = "All checkout fields are required.";
         header("Location: cart.php");
         exit();
     }
-
     $orderQuery = "INSERT INTO orders (user_id, total, status, created_at) VALUES (?, ?, 'Pending', NOW())";
     $stmt = $pdo->prepare($orderQuery);
     $stmt->execute([$user_id, $total_price]);
-
-
     $order_id = $pdo->lastInsertId();
-
     $orderItemQuery = "INSERT INTO order_items (order_id, book_id, quantity, price) VALUES (?, ?, ?, ?)";
     $stmtOrderItem = $pdo->prepare($orderItemQuery);
-
     foreach ($cart_items as $item) {
         $stmtOrderItem->execute([
             $order_id,
@@ -94,13 +81,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             $item['price']
         ]);
     }
-
     if ($cart_id) {
         $stmt = $pdo->prepare("DELETE FROM cart_items WHERE cart_id = ?");
         $stmt->execute([$cart_id]);
     }
-
-
     $_SESSION['success_message'] = "Your order has been placed successfully!";
     header("Location: ../views/order_confirmation.php");
     exit();
