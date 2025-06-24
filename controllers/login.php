@@ -59,13 +59,12 @@ if ($_POST) {
     border-bottom: 1px solid rgba(255, 255, 255, 0.18);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
-
-.navbar-brand .name {
-    color: #027b9a;
-    font-weight: bold;
-    font-family: Arial, Helvetica, sans-serif;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-}
+    .navbar-brand .name {
+      color: #027b9a;
+      font-weight: bold;
+      font-family: Arial, Helvetica, sans-serif;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    }
 
 .login-container {
     max-width: 450px;
@@ -209,60 +208,6 @@ if ($_POST) {
     width: 100%;
 }
 
-footer {
-    background: linear-gradient(135deg, #004658 0%, #027b9a 100%);
-    margin-top: auto;
-}
-
-footer .navbar-brand .name {
-    color: white;
-}
-
-footer .btn-primary {
-    background: #027b9a;
-    border-color: #027b9a;
-    border-radius: 20px;
-    padding: 10px 20px;
-    font-weight: bold;
-    transition: all 0.3s ease;
-}
-
-footer .btn-primary:hover {
-    background: #00bef0;
-    border-color: #00bef0;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 191, 240, 0.3);
-}
-
-footer .form-control {
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-}
-
-footer .form-control::placeholder {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-footer .form-control:focus {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: #00bef0;
-    color: white;
-}
-
-footer h5 {
-    color: #00bef0;
-    font-weight: bold;
-}
-
-footer a {
-    transition: color 0.3s ease;
-}
-
-footer a:hover {
-    color: #00bef0 !important;
-}
 
 @media (max-width: 768px) {
     .login-container {
@@ -305,7 +250,7 @@ footer a:hover {
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="../index.php">
                     <img src="../images/logo.png" alt="BookWartz Logo" class="logo" style="width: 50px; height: 50px;">
-                <h2 class="ms-2">BookWartz</h2>
+        <h2 class="ms-2 name">BookWartz</h2>
             </a>
         </div>
     </nav>
