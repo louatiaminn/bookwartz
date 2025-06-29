@@ -68,12 +68,12 @@ session_start();
         <h1 class="display-4 fw-bold mb-3 my-4" style="color: honeydew;">
           Welcome, <?= htmlspecialchars($_SESSION['username']); ?>!
         </h1>
-        <p class="lead mb-4" style="color: honeydew;">Explore our collection and find your next favorite book.</p>
+        <p class="lead mb-4" style="color: honeydew;">Let the perfect story cast its spell upon you from our treasure trove of tales.</p>
         <a href="views/logout.php" class="btn btn-danger btn-lg me-3 btn-sm hero-button">Logout</a>
         <a href="views/userdash.php" class="btn btn-outline-success me-3 btn-lg btn-sm hero-button">Dashboard</a>
       <?php else: ?>
         <h1 class="display-4 fw-bold mb-3 my-4" style="color: honeydew;">Discover Your Next Read</h1>
-        <p class="lead mb-4" style="color: honeydew;">Find the perfect book from our extensive collection.</p>
+        <p class="lead mb-4" style="color: honeydew;">Step through the pages into realms of wonder and infinite possibility.</p>
         <a href="controllers/login.php" class="btn btn-primary btn-lg me-3 btn-sm hero-button">Login</a>
         <a href="controllers/register.php" class="btn btn-outline-primary me-3 btn-lg btn-sm hero-button">Register</a>
       <?php endif; ?>
@@ -87,37 +87,37 @@ session_start();
       <div class="swiper">
         <div class="swiper-wrapper">
           <div class="swiper-slide text-center" style="background-image: url('images/bestsjpeg.jpeg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="bestsell.php">Bestsellers</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/bestsell.php">Bestsellers</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/new.webp');">
-            <h3><a class="text-decoration-none bg-light px-3" href="newArrival.php">New Arrivals</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/newArrival.php">New Arrivals</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/3.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="mostpopular.php">Most Popular</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/mostpopular.php">Most Popular</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/feat.webp');">
-            <h3><a class="text-decoration-none bg-light px-3" href="featured.php">Featured</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/featured.php">Featured</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/5.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="toprated.php">Top Rated</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/toprated.php">Top Rated</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/6.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="fiction.php">Fiction</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/fiction.php">Fiction</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/nonf.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="nonfiction.php">Non-Fiction</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/nonfiction.php">Non-Fiction</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/child.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="children.php">Children</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/children.php">Children</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/science.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="science.php">Science</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/science.php">Science</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/hist.webp');">
-            <h3><a class="text-decoration-none bg-light px-3" href="history.php">History</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/history.php">History</a></h3>
           </div>
           <div class="swiper-slide text-center" style="background-image: url('images/anime.jpg');">
-            <h3><a class="text-decoration-none bg-light px-3" href="anime.php">Manga</a></h3>
+            <h3><a class="text-decoration-none bg-light px-3" href="categories/anime.php">Manga</a></h3>
           </div>
         </div>
         <div class="swiper-button-next"></div>
@@ -217,7 +217,6 @@ session_start();
     </div>
   </section>
 
-  <!-- Highlights Section -->
   <hr class="section-divider">
   <h2 class="heading text-center" id="highlights">Highlights</h2>
   <div class="container mt-5">
@@ -312,7 +311,6 @@ session_start();
     </div>
   </div>
 
-  <!-- Contact Section -->
   <hr class="section-divider">
   <h2 class="heading text-center" id="contact">Contact</h2>
   <p class="text-center text-muted">Contactez-nous par téléphone ou par email</p>
@@ -366,7 +364,6 @@ session_start();
     </div>
   </div>
 
-  <!-- Footer -->
   <hr class="section-divider">
   <footer class="text-white pt-4" style="background-color: #004658;">
     <div class="container">

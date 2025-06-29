@@ -158,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
 
         <?php if (empty($cart_items)): ?>
             <div class="text-center">
-                <p class="lead">Your cart is empty. <a href="../index.php" class="btn btn-primary">Continue shopping</a></p>
+                <p class="lead">Your cart is empty. <a href="../categories/bestsell.php" class="btn btn-primary">Continue shopping</a></p>
             </div>
         <?php else: ?>
             <div class="table-responsive">
@@ -204,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 </table>
             </div>
             <div class="text-center mt-4 mb-4">
-                <a href="../index.php" class="btn btn-primary btn-lg">Continue Shopping</a>
+                <a href="../categories/bestsell.php" class="btn btn-primary btn-lg">Continue Shopping</a>
                 <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#checkoutModal">Proceed to Checkout</button>
             </div>
         <?php endif; ?>

@@ -115,9 +115,10 @@ def load_user_interactions():
         cursor.execute("SET NAMES utf8mb4")
         cursor.execute("SET CHARACTER SET utf8mb4")
         
+        # Enhanced interaction scoring
         query = """
         SELECT DISTINCT u.id as user_id, b.id as book_id, b.title, 
-               1 as interaction_score
+               1.0 as interaction_score
         FROM users u
         JOIN cart c ON u.id = c.user_id
         JOIN cart_items ci ON c.id = ci.cart_id
@@ -126,7 +127,7 @@ def load_user_interactions():
         UNION ALL
         
         SELECT DISTINCT u.id as user_id, b.id as book_id, b.title,
-               2 as interaction_score
+               3.0 as interaction_score
         FROM users u
         JOIN orders o ON u.id = o.user_id
         JOIN order_items oi ON o.id = oi.order_id
@@ -151,17 +152,24 @@ def load_user_interactions():
         log_debug(f"Error loading interactions: {str(e)}")
         return None
 
-def create_content_features(books_df):
+def create_weighted_features(books_df):
+    """Create weighted content features giving more importance to title and author"""
     books_df['features'] = (
-        books_df['title'].fillna('').astype(str) + ' ' + 
-        books_df['author'].fillna('').astype(str) + ' ' + 
-        books_df['description'].fillna('').astype(str) + ' ' + 
-        books_df['category_name'].fillna('').astype(str)
+        (books_df['title'].fillna('').astype(str) + ' ') * 3 +  # Title gets 3x weight
+        (books_df['author'].fillna('').astype(str) + ' ') * 2 +  # Author gets 2x weight
+        books_df['category_name'].fillna('').astype(str) + ' ' +
+        books_df['description'].fillna('').astype(str)
     )
     return books_df
 
-def find_similar_title(input_title, title_list, threshold=0.4):
-    """Enhanced title matching with better normalization"""
+def calculate_rating_weight(rating):
+    """Calculate weight based on rating (0-5 scale)"""
+    if pd.isna(rating) or rating == 0:
+        return 0.5  # Default weight for unrated books
+    return float(rating) / 5.0
+
+def find_similar_title(input_title, title_list, threshold=0.5):
+    """Enhanced title matching with better normalization and higher threshold"""
     
     # Normalize input title
     input_title_normalized = normalize_title(input_title).lower()
@@ -188,7 +196,7 @@ def find_similar_title(input_title, title_list, threshold=0.4):
             log_debug(f"Partial match found (title contains input): '{original_title}'")
             return original_title
     
-    # 4. Fuzzy matching
+    # 4. Fuzzy matching with higher threshold
     best_match = None
     best_ratio = 0
     
@@ -246,23 +254,32 @@ def get_collaborative_recommendations(book_title, books_df, interactions_df, num
         
         similar_books = []
         for book_id, similarity_score in zip(user_book_matrix.columns, similarities):
-            if book_id != target_book_id and similarity_score > 0.1:
+            # Increased threshold for better quality
+            if book_id != target_book_id and similarity_score > 0.2:
                 book_info = books_df[books_df['id'] == book_id]
                 if len(book_info) > 0:
                     book_info = book_info.iloc[0]
+                    # Calculate rating weight
+                    rating_weight = calculate_rating_weight(book_info['rating'])
+                    # Combine similarity with rating weight
+                    weighted_score = float(similarity_score) * rating_weight
+                    
                     similar_books.append({
                         'book_id': int(book_id),
                         'title': str(book_info['title']),
                         'author': str(book_info['author']),
                         'description': str(book_info['description']) if book_info['description'] else '',
                         'price': float(book_info['price']) if book_info['price'] else 0,
+                        'rating': float(book_info['rating']) if book_info['rating'] else 0,
                         'image': str(book_info['image']) if book_info['image'] else '',
                         'category_name': str(book_info['category_name']) if book_info['category_name'] else '',
                         'similarity_score': float(similarity_score),
+                        'weighted_score': weighted_score,
                         'source': 'collaborative'
                     })
         
-        similar_books.sort(key=lambda x: x['similarity_score'], reverse=True)
+        # Sort by weighted score instead of just similarity
+        similar_books.sort(key=lambda x: x['weighted_score'], reverse=True)
         
         log_debug(f"Generated {len(similar_books[:num_recommendations])} collaborative recommendations")
         return {
@@ -277,7 +294,7 @@ def get_collaborative_recommendations(book_title, books_df, interactions_df, num
 
 def get_content_recommendations(book_title, books_df, num_recommendations=6):
     try:
-        books_df = create_content_features(books_df)
+        books_df = create_weighted_features(books_df)
         
         title_list = books_df['title'].tolist()
         matched_title = find_similar_title(book_title, title_list)
@@ -285,7 +302,15 @@ def get_content_recommendations(book_title, books_df, num_recommendations=6):
         if matched_title is None:
             return None
         
-        tfidf = TfidfVectorizer(max_features=1000, stop_words='english', lowercase=True)
+        # Enhanced TF-IDF with better parameters
+        tfidf = TfidfVectorizer(
+            max_features=2000,  # Increased features
+            stop_words='english', 
+            lowercase=True,
+            ngram_range=(1, 2),  # Include bigrams
+            min_df=2,  # Ignore very rare terms
+            max_df=0.8  # Ignore very common terms
+        )
         tfidf_matrix = tfidf.fit_transform(books_df['features'])
         
         matched_idx = books_df[books_df['title'] == matched_title].index[0]
@@ -299,20 +324,31 @@ def get_content_recommendations(book_title, books_df, num_recommendations=6):
         for i, score in sorted_scores[1:]:
             if count >= num_recommendations:
                 break
-            if score > 0.1:
+            # Increased threshold for better quality
+            if score > 0.3:
                 book = books_df.iloc[i]
+                # Calculate rating weight
+                rating_weight = calculate_rating_weight(book['rating'])
+                # Combine similarity with rating weight
+                weighted_score = float(score) * rating_weight
+                
                 recommendations.append({
                     'book_id': int(book['id']),
                     'title': str(book['title']),
                     'author': str(book['author']),
                     'description': str(book['description']) if book['description'] else '',
                     'price': float(book['price']) if book['price'] else 0,
+                    'rating': float(book['rating']) if book['rating'] else 0,
                     'image': str(book['image']) if book['image'] else '',
                     'category_name': str(book['category_name']) if book['category_name'] else '',
                     'similarity_score': float(score),
+                    'weighted_score': weighted_score,
                     'source': 'content_based'
                 })
                 count += 1
+        
+        # Sort by weighted score
+        recommendations.sort(key=lambda x: x['weighted_score'], reverse=True)
         
         log_debug(f"Generated {len(recommendations)} content-based recommendations")
         return {
@@ -347,17 +383,25 @@ def get_category_recommendations(book_title, books_df, num_recommendations=3):
         if len(same_category_books) == 0:
             return None
         
+        # Sort by rating within same category
+        same_category_books = same_category_books.sort_values('rating', ascending=False, na_last=True)
+        
         recommendations = []
         for _, book in same_category_books.head(num_recommendations).iterrows():
+            rating_weight = calculate_rating_weight(book['rating'])
+            weighted_score = 0.8 * rating_weight  # Base category similarity * rating weight
+            
             recommendations.append({
                 'book_id': int(book['id']),
                 'title': str(book['title']),
                 'author': str(book['author']),
                 'description': str(book['description']) if book['description'] else '',
                 'price': float(book['price']) if book['price'] else 0,
+                'rating': float(book['rating']) if book['rating'] else 0,
                 'image': str(book['image']) if book['image'] else '',
                 'category_name': str(book['category_name']) if book['category_name'] else '',
                 'similarity_score': 0.8,
+                'weighted_score': weighted_score,
                 'source': 'same_category'
             })
         
@@ -397,33 +441,41 @@ def recommend_books(book_title):
             }
         }
         
+        # Try collaborative filtering first
         collaborative_results = get_collaborative_recommendations(book_title, books_df, interactions_df)
         if collaborative_results and len(collaborative_results['recommendations']) > 0:
             results['recommendations'].extend(collaborative_results['recommendations'])
             results['method_used'].append('collaborative')
             results['debug_info']['matched_title'] = collaborative_results['matched_title']
         
+        # Fill remaining slots with content-based recommendations
         if len(results['recommendations']) < 6:
             content_results = get_content_recommendations(book_title, books_df)
             if content_results:
                 for rec in content_results['recommendations']:
                     if len(results['recommendations']) >= 6:
                         break
+                    # Avoid duplicates
                     if not any(r['book_id'] == rec['book_id'] for r in results['recommendations']):
                         results['recommendations'].append(rec)
                 results['method_used'].append('content_based')
                 if 'matched_title' not in results['debug_info']:
                     results['debug_info']['matched_title'] = content_results['matched_title']
         
+        # Fill remaining slots with category-based recommendations
         if len(results['recommendations']) < 6:
             category_results = get_category_recommendations(book_title, books_df)
             if category_results:
                 for rec in category_results['recommendations']:
                     if len(results['recommendations']) >= 6:
                         break
+                    # Avoid duplicates
                     if not any(r['book_id'] == rec['book_id'] for r in results['recommendations']):
                         results['recommendations'].append(rec)
                 results['method_used'].append('category_based')
+        
+        # Final sort by weighted score for best quality recommendations first
+        results['recommendations'].sort(key=lambda x: x.get('weighted_score', x.get('similarity_score', 0)), reverse=True)
         
         if not results['recommendations']:
             return {

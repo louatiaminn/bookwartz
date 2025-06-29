@@ -374,10 +374,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['find_book_id'])) {
         </div>
     </div>
 
-    <div class="d-flex justify-content-center my-4">
-        <button class="btn btn-outline-primary">Load More</button>
-    </div>
-
     <footer class="text-white pt-4" style="background-color: #004658;">
         <div class="container">
             <div class="row">

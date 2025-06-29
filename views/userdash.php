@@ -369,7 +369,6 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <body>
 <div class="container my-5">
   <div class="dashboard-container">
-    <!-- Dashboard Header -->
     <div class="dashboard-header">
       <h1>Welcome to Your Dashboard</h1>
       <p class="welcome-text">Hello, <?= htmlspecialchars($user['username']); ?>!</p>
@@ -383,7 +382,6 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </div>
     </div>
 
-    <!-- Nav tabs -->
     <ul class="nav nav-tabs" id="dashboardTab" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab" aria-controls="profile" aria-selected="true">
@@ -402,9 +400,7 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </li>
     </ul>
 
-    <!-- Tab panes -->
     <div class="tab-content">
-      <!-- Profile Section -->
       <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
         <h2 class="section-title">Update Profile</h2>
         <?php if (isset($success_message)): ?>
@@ -433,7 +429,6 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
       </div>
 
-      <!-- Cart Section -->
       <div class="tab-pane fade" id="cart" role="tabpanel" aria-labelledby="cart-tab">
         <h2 class="section-title">Your Shopping Cart</h2>
         <?php if (!empty($cart_items)): ?>
@@ -464,7 +459,6 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <td class="fw-bold"><?= htmlspecialchars($item['title']); ?></td>
                 <td class="text-center"><?= number_format($item['price'], 2); ?> dt</td>
                 <td>
-                  <!-- Update Quantity Form -->
                   <form action="controllers/cart.php" method="POST" class="d-flex justify-content-center">
                     <input type="hidden" name="cart_item_id" value="<?= $item['cart_item_id']; ?>">
                     <input type="number" name="quantity" value="<?= $item['quantity']; ?>" min="1" class="form-control me-2" style="width: 80px;">
@@ -512,7 +506,6 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <th>Total (dt)</th>
                 <th>Status</th>
                 <th>Placed On</th>
-                <th>Details</th>
               </tr>
             </thead>
             <tbody>
@@ -521,13 +514,11 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <td class="text-center fw-bold">#<?= htmlspecialchars($order['id']); ?></td>
                 <td class="text-center"><?= number_format($order['total'], 2); ?></td>
                 <td class="text-center">
-                  <span class="badge bg-<?= $order['status'] === 'completed' ? 'success' : ($order['status'] === 'pending' ? 'warning' : 'secondary'); ?>">
+                  <button class="badge bg-<?= $order['status'] === 'completed' ? 'success' : ($order['status'] === 'pending' ? 'warning' : 'secondary'); ?>">
                     <?= htmlspecialchars(ucfirst($order['status'])); ?>
-                  </span>
+              </button>
                 </td>
                 <td class="text-center"><?= htmlspecialchars($order['created_at']); ?></td>
-                <td class="text-center">
-                  <a href="order_details.php?order_id=<?= $order['id']; ?>" class="btn btn-info btn-sm">View Details</a>
                 </td>
               </tr>
               <?php endforeach; ?>

@@ -31,7 +31,6 @@ if ($user_role !== 'admin' && $order['user_id'] != $user_id) {
     exit();
 }
 
-// Fetch order items with book details
 $stmtItems = $pdo->prepare("
     SELECT oi.*, b.title, b.author, b.image 
     FROM order_items oi
